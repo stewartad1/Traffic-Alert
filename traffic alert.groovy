@@ -1,7 +1,7 @@
 /**
  *  Travel Time Guru
  *
- *  BETA 1.2
+ *  BETA 1.6
  * 
  *  Copyright 2015 Tim Slagle
  *
@@ -41,11 +41,11 @@
  */
 
 definition(
-    name: "Traffic Alert",
-    namespace: "stewartad1",
-    author: "David Stewart",
+    name: "Travel Time Guru v2",
+    namespace: "Darc Ranger",
+    author: "Tim Slagle=[tslagle13]",
     description: "Uses the Bing Maps Maps API to calculate your time of travel to a destination with current traffic and alerts you via push, sonsos, or hue bulbs when you need to leave.",
-    category: "Convenience",
+    category: "My Apps",
     iconUrl: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience.png",
     iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience@2x.png",
 )
@@ -68,11 +68,14 @@ def mainPage() {
         section("Current travel time. (Touch the app button to update)") {
             paragraph travelParagraph()
         }
+        section("Enable App") {
+        input "activeApp", "bool", title: "Deactivate App to prevent it running, but preserving settings?", required: false, defaultValue: true
+        }
         section("Setup") {
             href "apiKey", title: "Bing Maps API Key", state: greyOutApi(), description: apiDescription()
             href "wayPoints", title: "Select Way Points", state: greyOutWayPoints(), description: waypointDescription()
             href "triggers", title: "Setup App Triggers", state: greyOutTriggers(), description: triggerDescription()
-            href "setupTimes", title: "Select Arrival and Alert Times", state: greyOutTimes()
+            href "setupTimes", title: "Select Arrival Time", state: greyOutTimes()
             href "notificationSettings", title: "Notification Settings", state: greyOutNotifications(), description: notificationsDescription()
             href "appRestrictions", title: "App Restrictions", state: greyOutRestrictions(), description: restrictionsDesription()
         }
@@ -87,9 +90,13 @@ def wayPoints(){
         section("About"){
             paragraph "Please set your home address and work address to calculate travel time between them. Ex. 85 Challenger Road, Ridgefield Park, NJ or  Samsung Electronics"
         }
-        section("Way Points"){	
-            input "location1", "text", title: "Home address", required: True
-            input "location2", "text", title: "Office address", required: True
+        section("Starting Way Point"){	
+            input "location1a", "text", title: "Starting Location Name", required: false, defaultValue: "Home"
+            input "location1", "text", title: "Starting Address", required: True
+         }
+         section("Ending Way Point"){	
+            input "location2a", "text", title: "Destination Name", required: false, defaultValue: "Work"
+            input "location2", "text", title: "Destination Address", required: True
         }	  
     }
 }
@@ -97,31 +104,25 @@ def wayPoints(){
 def triggers(){
     dynamicPage(name: "triggers") {
         section("About"){
-            paragraph "Select what events will trigger the app to start running in the morning."
+            paragraph "Select what events will trigger the app to start running."
         }
         section("Trigger the app to start when..."){
             input "motions", "capability.motionSensor", title: "Motion is sensed here", required: false
             input "contactOpen", "capability.contactSensor", title: "The following are opened", required: false
             input "contactClosed", "capability.contactSensor", title: "The following are closed", required: false
-            href "runAppBetweenTimes", title: "Only during a certain time", description: timeLabel ?: "Tap to set", state: greyOutTimeLabel1()    
-        }	  
+            input "trigger", "capability.momentary", title: "Momentary switch is the trigger?", required: false
+			input "checkTime", "time", title: "When do you want to start checking travel time?", required: false
+		}
     }
 }
-
-page(name: "runAppBetweenTimes", title: "Only during a certain time", refreshAfterSelection:true) {
-		section {
-			input "starting1", "time", title: "Starting", required: false, refreshAfterSelection:true
-			input "ending1", "time", title: "Ending", required: false, refreshAfterSelection:true
-		}
-}  
 
 def setupTimes(){
     dynamicPage(name: "setupTimes") {
         section("About"){
-            paragraph "Setup the time you want to arrive at work as well as when the app should start to notify you that you need to leave."
+            paragraph "Setup the time you want to arrive at your destination as well as when the app should start to notify you that you need to leave."
         }
-        section("Start Time"){
-            input "mytime", "time", title: "When do you want to arrive at work?", required: true
+    	section("Arrival Time"){
+            input "mytime", "time", title: "When do you want to arrive at your destination?", required: true
         }
         section("Notify Settings"){
             input "notifyLead", "number", title: "How many minutes before your first notification to leave? (default: 15 min)", required: True, defaultValue: 15
@@ -136,9 +137,13 @@ def notificationSettings(){
         section("About"){
             paragraph "Select the way you want to be notified when a notification is sent."
         }
-        section("Alert Settings"){
-            input "sendPushMessage", "enum", title: "Send a push notification?", metadata:[values:["Yes","No"]], required:false
+
+	section("Alert Settings"){
+            input "sendTextMessage", "bool", title: "Send a text notification?", required: false, defaultValue: "false"
+            input "phone", "phone", title: "Phone Number (for SMS, optional)", required: false
+            input "sendPushMessage", "bool", title: "Send a push notification?", required: false, defaultValue: "false" //, metadata:[values:["Yes","No"]], required:false
             input "sonos", "capability.musicPlayer", title:"Speak message via: (optional) ", multiple: true, required: false
+            input "speechDevice", "capability.speechSynthesis",title: "Speak message via: Ubi(optional)", multiple: true, required: false, refreshAfterSelection:true
             input "volume", "enum", title: "at this volume...", required: false, options: [[10:"10%"],[20:"20%"],[30:"30%"],[40:"40%"],[50:"50%"],[60:"60%"],[70:"70%"],[80:"80%"],[90:"90%"],[100:"100%"]]
             input "resumePlaying", "bool", title: "Resume currently playing music after alert?", required: false, defaultValue: true
         } 
@@ -172,7 +177,7 @@ def appRestrictions(){
             input "modes", "mode", title: "The current mode is", required: false, multiple: true
             input "days", "enum", title: "Only on certain days of the week", multiple: true, required: false,
 				options: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-            href "timeIntervalInput", title: "Only during a certain time", description: timeLabel ?: "Tap to set", state: greyOutTimeLabel()    
+            href "timeIntervalInput", title: "Only during a certain time", description: timeLabel ?: "Tap to set" //,state: greyOutTimeLabel()    
         }
         
     }
@@ -184,33 +189,27 @@ page(name: "timeIntervalInput", title: "Only during a certain time", refreshAfte
 			input "ending", "time", title: "Ending", required: false, refreshAfterSelection:true
 		}
 }  
-    
+
+//schedule upon install
 def installed() {
-	subscribe(app, totalTravelTime)
-    
-	if(motions){
-    	subscribe(motions, "motion.active", trafficCheck)
-    }
-    
-    if(contactOpen){
-    	subscribe(contactOpen, "contact.open", trafficCheck)
-    }
-    
-    if(contactClosed){
-    	subscribe(contactClosed, "contact.open", trafficCheck)
-    }
-    if(currTime > start1 || currTime < stop1){
-    (trafficCheck)
-    }
-    log.debug "installed with settings: $settings"
+	log.debug "Installed with settings: ${settings}"
+	initialize()
 }
 
+//reschedule upon update
 def updated() {
     unsubscribe()
-    unschedule(trafficCheck)
+    unschedule("trafficCheck")
+    unschedule("checkTimeHandler")
     state.clear()
+    	log.debug "Updated with settings: ${settings}"
+	initialize()
+}
+
+def initialize() {
+state.ending = ending
     subscribe(app, totalTravelTime)
-    
+   if(activeApp) {
 	if(motions){
     	subscribe(motions, "motion.active", trafficCheck)
     }
@@ -222,29 +221,54 @@ def updated() {
     if(contactClosed){
     	subscribe(contactClosed, "contact.open", trafficCheck)
     }
-    log.debug "installed with settings: $settings"
+    
+    if(trigger){
+    	subscribe(trigger, "momentary.pushed", trafficCheck)
+    }
+   if(checkTime){
+    def checkHour = Date.parse("yyyy-MM-dd'T'HH:mm:ss.SSSX", checkTime).format('H', TimeZone.getTimeZone('America/New_York')) //setTimeZone(location.timeZone)
+    def checkHourAP = Date.parse("yyyy-MM-dd'T'HH:mm:ss.SSSX", checkTime).format('h', TimeZone.getTimeZone('America/New_York')) //setTimeZone(location.timeZone)
+    def checkMinute = Date.parse("yyyy-MM-dd'T'HH:mm:ss.SSSX", checkTime).format('mm', TimeZone.getTimeZone('America/New_York'))//TimeZone.getTimeZone('EST')) "America/New_York"
+
+    log.debug "Check Time: " + hhmm(checkTime) 
+    //log.debug "Check Hour ${checkHour}"
+    //log.debug "Check Minute ${checkMinute}"
+	schedule("0 ${checkMinute} ${checkHour} * * ?", "checkTimeHandler")
+   }
+} else {
+	log.info "Travel App is currently off, Triggers are not Active."
+}
+//log.debug "initialize with settings: $settings" 
+}
+
+def checkTimeHandler(){
+	if(allOk) {
+		if (now() > timeToday(checkTime).time && now() < timeToday(mytime).time){
+    	log.debug "Begin checking Travel Time with Traffic to ${location2a}." + " : " + timeToday(mytime).time
+        //runIn(30, totalTravelTime) 
+        //runIn(60, trafficCheck)
+        trafficCheck()
+    }
+    else {
+   		//unschedule("checkTimeHandler")
+    	log.debug "Its not time anymore (checkTimeHandler)."
+        //initialize()
+    }
+}
 }
 
 def trafficCheck(evt){
-	if(allOk){
+log.info "App Active: ${activeApp} | people: ${people} | modes: ${modes} | days: ${days} | starting: ${hhmm(starting)} | ending: ${hhmm(ending)}"
+
+if(allOk){
 		if(state.travelTimeTraffic){
             int timeLeft = getTimeLeft()
+            //log.info "Total travel time to ${location2a} from ${location1a} with traffic is ${state.travelTimeTraffic} minutes."
             if(timeLeft <= 0){
             	if(state.notifyNow != "true"){
                 def timeLeftFixed = -1 * timeLeft
-                def msg = "Attention: With current traffic conditions you will be ${timeLeftFixed} minutes late for work."
-                    if(sonos){
-                        if(resumePlaying){
-                            loadText(msg)
-                            sonos.playTrackAndResume(state.sound.uri, state.sound.duration, volume)
-                        }
-                        else{
-                            sonos.playText(msg)
-                        }    
-                    }
-                    if(sendPushMessage == "Yes"){
-                        sendPush(msg)
-                    }    
+                state.msg = "Attention: With current traffic conditions you will be ${timeLeftFixed} minutes late for ${location2a}. Total travel time with traffic is ${state.travelTimeTraffic} minutes."
+		getNotified()       
                     state.check = null
                     state.notify = null
                     state.notifyWarn = null
@@ -253,27 +277,19 @@ def trafficCheck(evt){
                     if(hues){
                         sendcolor(colorEmergency)
                     }
+                    
+                    //ending = now()
                     if(state.trafficCheck != true){
+                    log.info "MSG 1[Running Late]: Attention - With current traffic conditions you will be ${timeLeftFixed} minutes late for ${location2a}. Total travel time with traffic is ${state.travelTimeTraffic} minutes."
                         runEvery5Minutes(trafficCheck)
                         state.trafficCheck = true
                     }
             	}       
             }
             else if(timeLeft <= notifyLeadEmergency){
-                def msg = "You have ${timeLeft} minutes until you need to leave for work"
+                state.msg = "You have ${timeLeft} minutes until you need to leave ${location1a} for ${location2a}. Total travel time with traffic is ${state.travelTimeTraffic} minutes."
                 if (state.notifyEmergency != "true"){
-                    if(sonos){
-                        if(resumePlaying){
-                            loadText(msg)
-                            sonos.playTrackAndResume(state.sound.uri, state.sound.duration, volume)
-                        }
-                        else{
-                            sonos.playText(msg)
-                        }    
-                    }
-                    if(sendPushMessage == "Yes"){
-                        sendPush(msg)
-                    }
+		getNotified()                       
                     state.check = null
                     state.notify = null
                     state.notifyWarn = null
@@ -283,26 +299,16 @@ def trafficCheck(evt){
                         sendcolor(colorEmergency)
                     }
                     if(state.trafficCheck != true){
-                        runEvery5Minutes(trafficCheck)
+                    log.info "MSG 2[{notifyLeadEmergency} Minutes]: You have ${timeLeft} minutes until you need to leave ${location1a} for ${location2a}. Total travel time with traffic is ${state.travelTimeTraffic} minutes."
+                        runEvery5Minutes(trafficCheck) 
                         state.trafficCheck = true
                     } 
                 }
             }
             else if(timeLeft <= notifyLeadWarn){
-                def msg = "You have ${timeLeft} minutes until you need to leave for work"
+                state.msg = "You have ${timeLeft} minutes until you need to leave ${location1a} for ${location2a}. Total travel time with traffic is ${state.travelTimeTraffic} minutes."
                 if (state.notifyWarn != "true"){
-                    if(sonos){
-                        if(resumePlaying){
-                            loadText(msg)
-                            sonos.playTrackAndResume(state.sound.uri, state.sound.duration, volume)
-                        }
-                        else{
-                            sonos.playText(msg)
-                        }    
-                    }
-                    if(sendPushMessage == "Yes"){
-                        sendPush(msg)
-                    }
+ 		getNotified()                       
                     state.check = null
                     state.notify = null
                     state.notifyNow = null
@@ -312,26 +318,16 @@ def trafficCheck(evt){
                         sendcolor(colorWarn)
                     }
                     if(state.trafficCheck != true){
-                        runEvery5Minutes(trafficCheck)
+                    log.info "MSG 2[${notifyLeaWarn} Minutes]: You have ${timeLeft} minutes until you need to leave ${location1a} for ${location2a}. Total travel time with traffic is ${state.travelTimeTraffic} minutes."
+                        runEvery5Minutes(trafficCheck) 
                         state.trafficCheck = true
                     } 
                 }
             }
             else if(timeLeft <= notifyLead){
-                def msg = "You have ${timeLeft} minutes until you need to leave for work"
+                state.msg = "You have ${timeLeft} minutes until you need to leave ${location1a} for ${location2a}. Total travel time with traffic is ${state.travelTimeTraffic} minutes."
                 if (state.notify != "true"){
-                    if(sonos){
-                        if(resumePlaying){
-                            loadText(msg)
-                            sonos.playTrackAndResume(state.sound.uri, state.sound.duration, volume)
-                        }
-                        else{
-                            sonos.playText(msg)
-                        }    
-                    }
-                    if(sendPushMessage == "Yes"){
-                        sendPush(msg)
-                    }
+		getNotified()                       
                     state.check = null
                     state.notify = "true"
                     state.notifyWarn = null
@@ -341,25 +337,15 @@ def trafficCheck(evt){
                         sendcolor(colorNotify)
                     }
                     if(state.trafficCheck != true){
-                        runEvery5Minutes(trafficCheck)
+                    log.info "MSG 3[${notifyLead} Minutes]: You have ${timeLeft} minutes until you need to leave ${location1a} for ${location2a}. Total travel time with traffic is ${state.travelTimeTraffic} minutes."
+                        runEvery5Minutes(trafficCheck) 
                         state.trafficCheck = true
                     } 
                 }
             }
             else if((state.notify == "true" || state.notifyWarn == "true" || state.notifyEmergency == "true") && state.check != "true"){
-                def msg = "Traffic conditions seem to have improved.  You now have ${timeLeft} minutes to leave for work."
-                if(sonos){
-                        if(resumePlaying){
-                            loadText(msg)
-                            sonos.playTrackAndResume(state.sound.uri, state.sound.duration, volume)
-                        }
-                        else{
-                            sonos.playText(msg)
-                        }    
-                }
-                if(sendPushMessage == "Yes"){
-                        sendPush(msg)
-                }    
+                state.msg = "Traffic conditions seem to have improved.  You now have ${timeLeft} minutes to leave ${location1a} for ${location2a}. Total travel time with traffic is ${state.travelTimeTraffic} minutes."
+		getNotified()                          
                 state.check = "true"
                 state.notify = null
                 state.notifyWarn = null
@@ -370,49 +356,93 @@ def trafficCheck(evt){
                     hues.off([delay:5000])
                 }
                 if(state.trafficCheck != true){
-                    runEvery5Minutes(trafficCheck)
+                log.info "MSG 4[Improved]: Traffic conditions seem to have improved.  You now have ${timeLeft} minutes to leave ${location1a} for ${location2a}. Total travel time with traffic is ${state.travelTimeTraffic} minutes."
+                    runEvery5Minutes(trafficCheck) 
                     state.trafficCheck = true
                 } 
             }    
             else{
                 if (state.check != "greeting"){
-                def msg = "Good morning.  You have ${timeLeft} minutes to leave for work."
-                if(sonos){
-                        if(resumePlaying){
-                            loadText(msg)
-                            sonos.playTrackAndResume(state.sound.uri, state.sound.duration, volume)
-                        }
-                        else{
-                            sonos.playText(msg)
-                        }    
-                }
-                if(sendPushMessage == "Yes"){
-                        sendPush(msg)
-                    }
+                state.msg = "You have ${timeLeft} minutes to leave ${location1a} for ${location2a}. Total travel time with traffic is ${state.travelTimeTraffic} minutes."
+		getNotified()                       
                 state.check = "greeting"
                 state.notify = null
                 state.notifyWarn = null
                 state.notifyEmergency = null
                 state.notifyNow = null
                 if(state.trafficCheck != true){
-                    runEvery5Minutes(trafficCheck)
+                log.info "MSG 5[Greeting]: You have ${timeLeft} minutes to leave ${location1a} for ${location2a}. Total travel time with traffic is ${state.travelTimeTraffic} minutes."
+                runEvery5Minutes(trafficCheck) 
                     state.trafficCheck = true
                 }    
                 }
             }
         }
         else{
-    		log.debug "I do not have a travel time so I will check again in 5 minutes."
+    		log.info "I do not have a travel time so I will look it up."
+            //state.msg = "Darc, I do not have a travel time so I will need to look it up."
+		//getNotified()
+            log.info "Check 6:Getting Details"
         	if(state.trafficCheck != true){
-        		runEvery5Minutes(trafficCheck)
-        		state.trafficCheck = true
+             runIn(10, totalTravelTime)
+             log.info "Check 6A:Getting Travel Time"
+             runIn(20, trafficCheck)
+             log.info "Check 6B:Traffic Check"
+            runEvery5Minutes(trafficCheck) 
+				state.trafficCheck = true
         	}
         }    
 	}
     else{
+	log.info "Travel App is currently inactive.  Restrictions prevent it from running"
     	unschedule(trafficCheck)
-    	state.clear()       
+    	state.clear()         
+        if(activeApp == false) {
+
+        }
     }    
+
+}
+
+def getNotified(){
+def msg = state.msg
+log.info "Push/SMS Message: $msg"
+//sendNotificationEvent("${app.label.replace(" ","").toUpperCase()}: Settings activated")
+                    if(sonos){
+                       /* if(resumePlaying){
+                            loadText(msg)
+                            sonos.playTrackAndResume(state.sound.uri, state.sound.duration, volume)
+                        }
+                        else{*/
+                        	sonos.each(){		// Sonos Speaks Message
+        				log.debug ("${it.displayName} | - | Sending speak(PlayText).")
+                            sonos.playText(msg)
+                            }
+                        //}    
+                   }
+                    
+                    if(speechDevice){
+                    //Talk(msg, speechDevice, evt) 
+                    speechDevice.each(){		// Ubi Speaks Message
+        			log.debug ("${it.displayName} | - | Sending speak(Speak).")
+		    		it.speak(msg)
+                    }
+            
+             		if(sendPushMessage){
+                 	sendPush(msg  + " : " + app.label)
+            		}      
+              		 else {
+					log.debug "No Push"
+                   	}
+                      
+             		if (phone !=null  && sendTextMessage) {
+                 	log.debug "sending SMS"
+				  	sendSms(phone, msg)
+                     }
+     				  else {
+				 	log.debug "No SMS"
+                   }
+}
 }
 
 private getTimeLeft(){
@@ -434,24 +464,35 @@ private getTimeLeft(){
         	log.info "Travel time with traffic = ${state.travelTimeTraffic}"
      	}
    	}
+    
     catch (e) {
 		log.error "HTTP Error: ${e}"
 	}
-    
+if(allOk) {   
 	def getTime = timeToday(mytime)    
 	def timeTillArrival = getTime.time - now()
 	def timeTillArrivalMinutes = (timeTillArrival / 60000) as Double
 	def timeTillArrivalMinutesRounded = timeTillArrivalMinutes.round() as Double
-	log.info"Time until event = ${timeTillArrivalMinutesRounded}"
+	log.info "Time until Arrival/Event = ${timeTillArrivalMinutesRounded}"
 	def timeLeft = timeTillArrivalMinutesRounded - state.travelTimeTraffic
-	log.info"Time Left = ${timeLeft}"
+	log.info "Time Left = ${timeLeft}"
 	result = timeLeft
 
-result
+result              
+}
 }
 
 def totalTravelTime(evt){
+if(allOk || app) {
 	getTimeLeft()
+    if(sendPushMessage || sendTextMessage){
+	sendPush (app.label + ": With traffic, the estimated travel time is ${state.travelTimeTraffic} minutes from ${location1a} to ${location2a}.")
+    }
+	log.info ("With traffic, the estimated travel time is ${state.travelTimeTraffic} minutes from ${location1a} to ${location2a}.")
+  }
+       if(activeApp != true) {
+		log.info "Travel App is currently off, please switch on if you want the app running normally."
+ 	}
 }
 def sendcolor(color) {
 	log.debug "Sendcolor = $color"
@@ -575,10 +616,19 @@ private saveSelectedSong() {
 	}
 }
 */
-private loadText(msg) {
+private loadText(msg) {  // not fully working yet.
 		log.debug "msg = ${msg}"
 		state.sound = textToSpeech(msg, true)
+		log.trace (" Message send[S]: ${msg}")
 }
+// Incorportated "Speak" command under getNotified()
+/*private Talk(msg, speechDevice, evt){
+	    speechDevice.each(){
+        log.debug ("${it.displayName} | - | Sending speak().")
+        log.trace (" Message send[U]: ${msg}")
+		    it.speak(msg)
+}
+}*/
 
 def greyOutApi(){
 	def result = ""
@@ -598,7 +648,7 @@ def greyOutWayPoints(){
 
 def greyOutTriggers(){
 	def result = ""
-    if (motions || contactClosed || contactOpen || startTime) {
+    if (motions || contactClosed || contactOpen || trigger || checkTime) {
     	result = "complete"	
     }
     result
@@ -614,7 +664,7 @@ def greyOutTimes(){
 
 def greyOutNotifications(){
 	def result = ""
-    if (sendPushMessage || sonos || hues) {
+    if (sendPushMessage || sendTextMessage || sonos || hues || speechDevice) {
     	result = "complete"	
     }
     result
@@ -635,27 +685,16 @@ def greyOutTimeLabel(){
     }
     result
 }
-def greyOutTimeLabel1(){
-	def result = ""
-    if(starting1 || ending1){
-    	result = true
-    }
-    result
-}
 
 def triggerDescription(){
 	def result = ""
-    def timeRest1 = ""
-    if(starting1 || ending1){
-    	timeRest1 = getTimeLabel()
-    }
-    result = "Motion: ${motions}"  + "\n" + "Contact Open: ${contactOpen}"  + "\n" + "Contact Closed: ${contactClosed}"  + "\n" + "Time: ${getTimeLabel1()}"
+    result = "Motion: ${motions}"  + "\n" + "Contact Open: ${contactOpen}"  + "\n" + "Contact Closed: ${contactClosed}" + "\n" + "Momentary: ${trigger}" + "\n"+ "Start Checking: " +  (checkTime) + "\n" //timeToday(startTime, location.timeZone) or hhmm(ceckTime)
 }
 
 def waypointDescription(){
 	def result = ""
     if(location1 && location2){
-    	result = "Calculate times between"  + "\n" + "${location1}"  + "\n" + "and ${location2}."
+    	result = "Calculate times between"  + "\n" + "${location1a}" + "\n"  + "${location1}"  + "\n" + "and ${location2a}" + "\n" + "${location2}."
     }
     else if(location1){
     	result = "Destination address not set"
@@ -671,7 +710,7 @@ def waypointDescription(){
 
 def notificationsDescription(){
 	def result = ""
-    result = 	"Send Push: ${sendPushMessage}" + "\n" + "Sonos: ${sonos}"  + "\n" + "Hues: ${hues}"
+    result = 	"Send Text: ${sendTextMessage}" + "\n" +"SMS #: ${phone}" + "\n" + "Send Push: ${sendPushMessage}" + "\n" + "Voice: ${speechDevice}" + "\n" + "Sonos: ${sonos}"  + "\n" + "Hues: ${hues}" + "\n"
 
 }
 
@@ -718,17 +757,21 @@ def restrictionsDesription(){
 
 def travelParagraph(){
 	def timeTravel = state.travelTimeTraffic as Integer
-	def result = "Total travel time with traffic is $timeTravel minutes."
+	def result = "Total travel time to ${location2a} with traffic is $timeTravel minutes."
     return result
 }
 
 private getAllOk() {
-	modeOk && daysOk && timeOk && peopleOk
+log.trace "activeApp = $activeApp"
+	modeOk && daysOk && timeOk && peopleOk && activeApp
 }
 
 private getModeOk(){
 	def result = false
-	if(modes.contains(location.mode)){
+     if (modes != "All Modes"){
+		result = true
+    }
+	else (modes.contains(location.mode)){
     	result = true
     }
     log.trace "modeOk: $result"
@@ -737,22 +780,27 @@ private getModeOk(){
 
 private getPeopleOk() {
   def result = false
-
   if(people.findAll { it?.currentPresence == "present" }) {
 result = true
-  }
-
-  log.debug("anyoneIsHome: ${result}")
+ }
+ if (people == null){
+	result = true
+    }
+    
+  log.trace("anyoneIsHome: ${result}")
 
   return result
-}
 
+}
 private getTimeOk() {
 	def result = true
 	if (starting && ending) {
 		def currTime = now()
+       // log.debug "Time-Now: ${(currTime)}"
 		def start = timeToday(starting).time
+       // log.debug "Start-Starting: ${(start)}"
 		def stop = timeToday(ending).time
+       // log.debug "Stop-Ending: ${(stop)}"
 		result = start < stop ? currTime >= start && currTime <= stop : currTime <= stop || currTime >= start
 	}
     
@@ -765,25 +813,6 @@ private getTimeOk() {
     
 	log.trace "timeOk = $result"
 	result
-}
-private getTimeOk1() {
-	def result1 = true
-	if (starting1 && ending1) {
-		def currTime = now()
-		def start1 = timeToday1(starting1).time
-		def stop1 = timeToday1(ending1).time
-		result1 = start1 < stop1 ? currTime >= start1 && currTime <= stop1 : currTime <= stop1 || currTime >= start1
-	}
-    
-    else if (starting1){
-    	result1 = currTime >= start1
-    }
-    else if (ending1){
-    	result1 = currTime <= stop1
-    }
-    
-	log.trace "timeOk = $result1"
-	result1
 }
 
 private getTimeLabel(){
@@ -800,20 +829,6 @@ private getTimeLabel(){
     }
 	timeLabel	
 }
-private getTimeLabel1(){
-	def timeLabel1 = "No Time restrictions"
-	
-    if(starting1 && ending1){
-    	timeLabel1 = "Between" + " " + hhmm(starting1) + " "  + "and" + " " +  hhmm(ending1)
-    }
-    else if (starting1) {
-		timeLabel1 = "Start at" + " " + hhmm(starting1)
-    }
-    else if(ending1){
-    timeLabel1 = "End at" + hhmm(ending1)
-    }
-	timeLabel1	
-}
 
 private hhmm(time, fmt = "h:mm a")
 {
@@ -823,9 +838,9 @@ private hhmm(time, fmt = "h:mm a")
 	f.format(t)
 }
 
-private getDayOk(dayList) {
+private getDaysOk() {
 	def result = true
-    if (dayList) {
+	if (days) {
 		def df = new java.text.SimpleDateFormat("EEEE")
 		if (location.timeZone) {
 			df.setTimeZone(location.timeZone)
@@ -834,7 +849,8 @@ private getDayOk(dayList) {
 			df.setTimeZone(TimeZone.getTimeZone("America/New_York"))
 		}
 		def day = df.format(new Date())
-		result = dayList.contains(day)
+        result = days.contains(day)
 	}
+    log.trace "daysOk = $result"
     result
 }
